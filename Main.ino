@@ -5,12 +5,12 @@
 #include <Adafruit_SSD1306.h>
 #include <ESP32Servo.h>
 // Configuration
-#define LED_PIN 33
+#define LED_PIN 21
 #define NUM_LEDS 20
 #define BRIGHTNESS 100
 #define LED_TYPE WS2811
 #define COLOR_ORDER GRB
-#define START_SWITCH 23
+#define START_SWITCH 22
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 Servo meuServo;
@@ -354,9 +354,12 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 HardwareSerial somSerial(2);
 DFRobotDFPlayerMini myDFPlayer;
 // MUDAR PINOS QUANDO FOR USAR A NOSSA BOARD
-#define OLED_SDA 14
-#define OLED_SCL 27
+#define OLED_SDA 27
+#define OLED_SCL 14
 int etapaAtual = 1;
+unsigned long ultimoMovimentoServo = 0;
+int intervaloWiggle = 100;  // Speed of wiggle (ms)
+bool ladoWiggle = false;    // Toggle for left/right
 unsigned long tempoInicio;
 unsigned long tempoDestaEtapa = 5000;  // isso são 5s
 
@@ -369,7 +372,6 @@ void setup() {
 	ESP32PWM::allocateTimer(3);
 	meuServo.setPeriodHertz(50);  // Standard 50hz servo
 	meuServo.attach(SERVO_PIN, 500, 2400);
-	meuServo.write(90);  // Start at center position
 	// --- Initialize Serial Monitor ---
 	Serial.begin(115200);
 	Wire.begin(OLED_SDA, OLED_SCL);
@@ -377,7 +379,7 @@ void setup() {
 	// --- Inicialização do Som (DFPlayer) ---
 	somSerial.begin(9600, SERIAL_8N1, 16, 17);
 	Serial.println("A iniciar DFPlayer...");
-	delay(2000);
+	delay(1000);
 
 	pinMode(START_SWITCH, INPUT_PULLUP);
 
@@ -398,11 +400,14 @@ void setup() {
 	}
 
 	display.clearDisplay();
+	display.display();
+	Serial.println("Ready. Press button to start.");
 	tempoInicio = millis();
-	etapaAtual = 1;  // Garante que começa na primeira etapa
+	meuServo.write(90);
+	sistemaAtivo = false;
+	Serial.println(sistemaAtivo);
+	Serial.println(etapaAtual);
 }
-
-
 void loop() {
 	unsigned long tempoAtual = millis();
 
@@ -413,7 +418,7 @@ void loop() {
 		etapaAtual = 1;
 		tempoInicio = tempoAtual;
 		myDFPlayer.volume(60);
-	  myDFPlayer.play(1);
+		myDFPlayer.play(1);
 	}
 
 	if (sistemaAtivo) {
@@ -433,6 +438,7 @@ void loop() {
 				display.drawBitmap(0, 0, img_esfregar, 128, 64, WHITE);
 				tempoDestaEtapa = 5000;
 				break;
+				
 			case 4:
 				display.drawBitmap(0, 0, img_molhar, 128, 64, WHITE);
 				tempoDestaEtapa = 5000;
@@ -442,11 +448,19 @@ void loop() {
 				tempoDestaEtapa = 5000;
 				break;
 			case 6:
-			tempoDestaEtapa = 10000;
 				display.drawBitmap(0, 0, img_confetes, 128, 64, WHITE);
-				// Shake first while the screen still shows 'confetes' and LEDs are Green
-				shakeServo(20);
-				
+
+				// Non-blocking wiggle logic
+				if (tempoAtual - ultimoMovimentoServo >= intervaloWiggle) {
+					ultimoMovimentoServo = tempoAtual;
+					ladoWiggle = !ladoWiggle;  // Switch sides
+
+					if (ladoWiggle) {
+						meuServo.write(90 + 35);
+					} else {
+						meuServo.write(90 - 35);
+					}
+				}
 				break;
 		}
 
@@ -461,15 +475,15 @@ void loop() {
 
 		FastLED.show();
 		display.display();
-
 		// 4. MUDANÇA AUTOMÁTICA
 		if (decorrido >= tempoDestaEtapa) {
 			if (etapaAtual < 6) {
 				etapaAtual++;
 				tempoInicio = millis();
 			} else {
+				// --- O SISTEMA TERMINOU AQUI ---
+				meuServo.write(90);  // Comando para PARAR (360°) ou CENTRALIZAR (180°)
 
-				// Now clear everything
 				FastLED.clear();
 				FastLED.show();
 				display.clearDisplay();
@@ -477,6 +491,8 @@ void loop() {
 
 				sistemaAtivo = false;
 				etapaAtual = 0;
+
+				Serial.println("Ciclo finalizado. Servo parado.");
 			}
 		}
 	}
@@ -493,28 +509,4 @@ void runColorCycle(unsigned long duration) {
 
 	FastLED.clear();
 	FastLED.show();
-}
-void shakeServo(int repetitions) {
-  // 1. Quick Wind-up
-  for (int pos = 90; pos <= 140; pos += 10) {
-    meuServo.write(pos);
-    delay(10);
-  }
-
-  // 2. Strong & Erratic Wiggle
-  for (int i = 0; i < repetitions; i++) {
-    // Randomize the angles slightly for an "erratic" look
-    int highPos = random(120, 150); 
-    int lowPos = random(30, 60);
-    
-    meuServo.write(highPos);
-    delay(random(30, 50)); // Fast, unpredictable speed
-    
-    meuServo.write(lowPos);
-    delay(random(30, 50));
-  }
-
-  // 3. Quick Reset
-  meuServo.write(90);
-  delay(50);
 }
