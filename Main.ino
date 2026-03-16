@@ -6,7 +6,7 @@
 #include <ESP32Servo.h>
 // Configuration
 #define LED_PIN 21
-#define NUM_LEDS 20
+#define NUM_LEDS 30
 #define BRIGHTNESS 100
 #define LED_TYPE WS2811
 #define COLOR_ORDER GRB
@@ -354,10 +354,13 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 HardwareSerial somSerial(2);
 DFRobotDFPlayerMini myDFPlayer;
 // MUDAR PINOS QUANDO FOR USAR A NOSSA BOARD
-#define OLED_SDA 27
-#define OLED_SCL 14
+#define OLED_SCL 27
+#define OLED_SDA 14
 int etapaAtual = 1;
+int pos = 0;
 unsigned long ultimoMovimentoServo = 0;
+int servoPosition = 90;     // Start at the center position
+int servoRange = 35;        // Adjust this value to control the wiggle range
 int intervaloWiggle = 100;  // Speed of wiggle (ms)
 bool ladoWiggle = false;    // Toggle for left/right
 unsigned long tempoInicio;
@@ -417,7 +420,7 @@ void loop() {
 		sistemaAtivo = true;
 		etapaAtual = 1;
 		tempoInicio = tempoAtual;
-		myDFPlayer.volume(30);
+		myDFPlayer.volume(100);
 		myDFPlayer.play(1);
 	}
 
@@ -438,7 +441,7 @@ void loop() {
 				display.drawBitmap(0, 0, img_esfregar, 128, 64, WHITE);
 				tempoDestaEtapa = 20000;
 				break;
-				
+
 			case 4:
 				display.drawBitmap(0, 0, img_molhar, 128, 64, WHITE);
 				tempoDestaEtapa = 14000;
@@ -449,23 +452,12 @@ void loop() {
 				break;
 			case 6:
 				display.drawBitmap(0, 0, img_confetes, 128, 64, WHITE);
-
-				// Non-blocking wiggle logic
-				if (tempoAtual - ultimoMovimentoServo >= intervaloWiggle) {
-					ultimoMovimentoServo = tempoAtual;
-					ladoWiggle = !ladoWiggle;  // Switch sides
-
-					if (ladoWiggle) {
-						meuServo.write(90 + 35);
-					} else {
-						meuServo.write(90 - 35);
-					}
-				}
+				wiggleServo();
 				break;
 		}
 
 		// 3. AS LUZES
-		if (decorrido < (tempoDestaEtapa * 0.7)) {
+		if (decorrido < (tempoDestaEtapa * 0.4)) {
 			fill_solid(leds, NUM_LEDS, CRGB::Red);
 		} else if (decorrido < (tempoDestaEtapa * 0.9)) {
 			fill_solid(leds, NUM_LEDS, CRGB::Yellow);
@@ -483,7 +475,6 @@ void loop() {
 			} else {
 				// --- O SISTEMA TERMINOU AQUI ---
 				meuServo.write(90);  // Comando para PARAR (360°) ou CENTRALIZAR (180°)
-
 				FastLED.clear();
 				FastLED.show();
 				display.clearDisplay();
@@ -496,6 +487,25 @@ void loop() {
 			}
 		}
 	}
+}
+void wiggleServo() {
+	// Servo spins forward at full speed for 1 second.
+	meuServo.write(180);
+	delay(500);
+	// Servo is stationary for 1 second.
+	meuServo.write(90);
+	delay(500);
+	meuServo.write(180);
+	delay(500);
+	// Servo is stationary for 1 second.
+	meuServo.write(90);
+	delay(500);
+	meuServo.write(180);
+	delay(500);
+	// Servo is stationary for 1 second.
+	meuServo.write(90);
+	delay(500);
+	
 }
 void runColorCycle(unsigned long duration) {
 	unsigned long startTime = millis();
