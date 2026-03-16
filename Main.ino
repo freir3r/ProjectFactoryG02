@@ -417,7 +417,7 @@ void loop() {
 		sistemaAtivo = true;
 		etapaAtual = 1;
 		tempoInicio = tempoAtual;
-		myDFPlayer.volume(60);
+		myDFPlayer.volume(30);
 		myDFPlayer.play(1);
 	}
 
@@ -428,24 +428,24 @@ void loop() {
 		switch (etapaAtual) {
 			case 1:
 				display.drawBitmap(0, 0, img_molhar, 128, 64, WHITE);
-				tempoDestaEtapa = 5000;
+				tempoDestaEtapa = 16000;
 				break;
 			case 2:
 				display.drawBitmap(0, 0, img_sabao, 128, 64, WHITE);
-				tempoDestaEtapa = 5000;
+				tempoDestaEtapa = 7000;
 				break;
 			case 3:
 				display.drawBitmap(0, 0, img_esfregar, 128, 64, WHITE);
-				tempoDestaEtapa = 5000;
+				tempoDestaEtapa = 20000;
 				break;
 				
 			case 4:
 				display.drawBitmap(0, 0, img_molhar, 128, 64, WHITE);
-				tempoDestaEtapa = 5000;
+				tempoDestaEtapa = 14000;
 				break;
 			case 5:
 				display.drawBitmap(0, 0, img_secar, 128, 64, WHITE);
-				tempoDestaEtapa = 5000;
+				tempoDestaEtapa = 8000;
 				break;
 			case 6:
 				display.drawBitmap(0, 0, img_confetes, 128, 64, WHITE);
