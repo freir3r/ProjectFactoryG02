@@ -6,7 +6,7 @@
 #include <ESP32Servo.h>
 // Configuration
 #define LED_PIN 21
-#define NUM_LEDS 30
+#define NUM_LEDS 40
 #define BRIGHTNESS 100
 #define LED_TYPE WS2811
 #define COLOR_ORDER GRB
@@ -375,6 +375,7 @@ void setup() {
 	ESP32PWM::allocateTimer(3);
 	meuServo.setPeriodHertz(50);  // Standard 50hz servo
 	meuServo.attach(SERVO_PIN, 500, 2400);
+
 	// --- Initialize Serial Monitor ---
 	Serial.begin(115200);
 	Wire.begin(OLED_SDA, OLED_SCL);
@@ -406,106 +407,131 @@ void setup() {
 	display.display();
 	Serial.println("Ready. Press button to start.");
 	tempoInicio = millis();
-	meuServo.write(90);
 	sistemaAtivo = false;
 	Serial.println(sistemaAtivo);
 	Serial.println(etapaAtual);
 }
 void loop() {
-	unsigned long tempoAtual = millis();
+  unsigned long tempoAtual = millis();
 
-	// 1. O BOTÃO
-	if (digitalRead(START_SWITCH) == LOW && !sistemaAtivo) {
-		delay(50);
-		sistemaAtivo = true;
-		etapaAtual = 1;
-		tempoInicio = tempoAtual;
-		myDFPlayer.volume(100);
-		myDFPlayer.play(1);
-	}
+  // 1. O BOTÃO
+  if (digitalRead(START_SWITCH) == LOW && !sistemaAtivo) {
+    delay(50);
+    sistemaAtivo = true;
+    etapaAtual = 1;
+    tempoInicio = tempoAtual;
+    myDFPlayer.volume(100);
+    myDFPlayer.play(1);
+  }
 
-	if (sistemaAtivo) {
-		unsigned long decorrido = tempoAtual - tempoInicio;
-		display.clearDisplay();
+  if (sistemaAtivo) {
+    unsigned long decorrido = tempoAtual - tempoInicio;
+    display.clearDisplay();
+    FastLED.clear(); 
 
-		switch (etapaAtual) {
-			case 1:
-				display.drawBitmap(0, 0, img_molhar, 128, 64, WHITE);
-				tempoDestaEtapa = 16000;
-				break;
-			case 2:
-				display.drawBitmap(0, 0, img_sabao, 128, 64, WHITE);
-				tempoDestaEtapa = 7000;
-				break;
-			case 3:
-				display.drawBitmap(0, 0, img_esfregar, 128, 64, WHITE);
-				tempoDestaEtapa = 20000;
-				break;
+    int pSize = NUM_LEDS / 4; // Blocos de 10 LEDs (se tiver 40)
+    CRGB corAtiva = CRGB::Black;
+    int particaoParaLigar = 0; // 1 a 4
 
-			case 4:
-				display.drawBitmap(0, 0, img_molhar, 128, 64, WHITE);
-				tempoDestaEtapa = 14000;
-				break;
-			case 5:
-				display.drawBitmap(0, 0, img_secar, 128, 64, WHITE);
-				tempoDestaEtapa = 8000;
-				break;
-			case 6:
-				display.drawBitmap(0, 0, img_confetes, 128, 64, WHITE);
-				wiggleServo();
-				break;
+    // 2. SINCRONIZAÇÃO ECRÃ + LEDS
+    switch (etapaAtual) {
+      case 1: // Imagem: Molhar
+        tempoDestaEtapa = 16000; 
+        display.drawBitmap(0, 0, img_molhar, 128, 64, WHITE);
+        corAtiva = CRGB::Blue;
+        particaoParaLigar = 1;
+        break;
+      case 2: // Imagem: Sabão
+        tempoDestaEtapa = 7000;  
+        display.drawBitmap(0, 0, img_sabao, 128, 64, WHITE);
+        corAtiva = CRGB::Red;
+        particaoParaLigar = 2;
+        break;
+      case 3: // Imagem: Esfregar (Ainda usa a partição do Sabão)
+        tempoDestaEtapa = 20000; 
+        display.drawBitmap(0, 0, img_esfregar, 128, 64, WHITE);
+        corAtiva = CRGB::Red;
+        particaoParaLigar = 2;
+        break;
+      case 4: // Imagem: Molhar (Enxaguar)
+        tempoDestaEtapa = 14000; 
+        display.drawBitmap(0, 0, img_molhar, 128, 64, WHITE);
+        corAtiva = CRGB::Yellow;
+        particaoParaLigar = 3;
+        break;
+      case 5: // Imagem: Secar
+        tempoDestaEtapa = 8000;  
+        display.drawBitmap(0, 0, img_secar, 128, 64, WHITE);
+        corAtiva = CRGB::Green;
+        particaoParaLigar = 4;
+        break;
+      case 6: // FIM
+        tempoDestaEtapa = 5000; 
+        display.drawBitmap(0, 0, img_confetes, 128, 64, WHITE);
+        wiggleServo(); 
+        break;
+    }
+
+    // 3. ATUALIZAÇÃO DOS LEDS
+    if (etapaAtual < 6) {
+      // Calcula o índice inicial da partição ativa
+      int inicio = (particaoParaLigar - 1) * pSize;
+      
+      // Acende apenas os LEDs daquela partição
+      fill_solid(&leds[inicio], pSize, corAtiva);
+
+      // Efeito Opcional: Faz a partição "respirar" (pulsar)
+      uint8_t pulse = beatsin8(40, 100, 255);
+      for(int i = inicio; i < inicio + pSize; i++) {
+        leds[i].nscale8(pulse);
+      }
+    } else {
+      // ETAPA 6: RAINBOW SLIGHTLY BLINKING
+      static uint8_t hue = 0;
+      hue += 2; // Velocidade da transição de cores
+      
+      fill_rainbow(leds, NUM_LEDS, hue, 7);
+
+      // Pisca suavemente: alterna entre ligado e desligado a cada 150ms
+      // Se quiser que o "apagado" dure menos, aumente o 150
+      if ((millis() / 150) % 2 == 0) {
+        FastLED.clear(); 
+      }
 		}
 
-		// 3. AS LUZES
-		if (decorrido < (tempoDestaEtapa * 0.4)) {
-			fill_solid(leds, NUM_LEDS, CRGB::Red);
-		} else if (decorrido < (tempoDestaEtapa * 0.9)) {
-			fill_solid(leds, NUM_LEDS, CRGB::Yellow);
-		} else {
-			fill_solid(leds, NUM_LEDS, CRGB::Green);
-		}
+    FastLED.show();
+    display.display();
 
-		FastLED.show();
-		display.display();
-		// 4. MUDANÇA AUTOMÁTICA
-		if (decorrido >= tempoDestaEtapa) {
-			if (etapaAtual < 6) {
-				etapaAtual++;
-				tempoInicio = millis();
-			} else {
-				// --- O SISTEMA TERMINOU AQUI ---
-				meuServo.write(90);  // Comando para PARAR (360°) ou CENTRALIZAR (180°)
-				FastLED.clear();
-				FastLED.show();
-				display.clearDisplay();
-				display.display();
-
-				sistemaAtivo = false;
-				etapaAtual = 0;
-
-				Serial.println("Ciclo finalizado. Servo parado.");
-			}
-		}
-	}
+    // 4. MUDANÇA DE ETAPA
+    if (decorrido >= tempoDestaEtapa) {
+      if (etapaAtual < 6) {
+        etapaAtual++;
+        tempoInicio = millis();
+      } else {
+        FastLED.clear();
+        FastLED.show();
+        display.clearDisplay();
+        display.display();
+        sistemaAtivo = false;
+        etapaAtual = 0;
+      }
+    }
+  }
 }
 void wiggleServo() {
 	// Servo spins forward at full speed for 1 second.
 	meuServo.write(180);
-	delay(500);
-	// Servo is stationary for 1 second.
+	delay(250);
 	meuServo.write(90);
-	delay(500);
+	delay(250);
 	meuServo.write(180);
-	delay(500);
-	// Servo is stationary for 1 second.
+	delay(250);
 	meuServo.write(90);
-	delay(500);
+	delay(250);
 	meuServo.write(180);
-	delay(500);
-	// Servo is stationary for 1 second.
+	delay(250);
 	meuServo.write(90);
-	delay(500);
-	
+	delay(250);
 }
 void runColorCycle(unsigned long duration) {
 	unsigned long startTime = millis();
