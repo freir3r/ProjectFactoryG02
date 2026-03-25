@@ -348,73 +348,63 @@ const unsigned char img_confetes[] PROGMEM = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07
 
 };
-
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
-// Usamos a Serial2 do ESP32 (Pinos 16 e 17)
 HardwareSerial somSerial(2);
 DFRobotDFPlayerMini myDFPlayer;
-// MUDAR PINOS QUANDO FOR USAR A NOSSA BOARD
+
 #define OLED_SCL 27
 #define OLED_SDA 14
 int etapaAtual = 1;
 int pos = 0;
 unsigned long ultimoMovimentoServo = 0;
-int servoPosition = 90;     // Start at the center position
-int servoRange = 35;        // Adjust this value to control the wiggle range
-int intervaloWiggle = 100;  // Speed of wiggle (ms)
-bool ladoWiggle = false;    // Toggle for left/right
+int servoPosition = 90;
+int servoRange = 45; 
+int intervaloWiggle = 250;
 unsigned long tempoInicio;
-unsigned long tempoDestaEtapa = 5000;  // isso são 5s
+unsigned long tempoDestaEtapa = 5000;
 
 CRGB leds[NUM_LEDS];
 
 void setup() {
-	ESP32PWM::allocateTimer(0);
-	ESP32PWM::allocateTimer(1);
-	ESP32PWM::allocateTimer(2);
-	ESP32PWM::allocateTimer(3);
-	meuServo.setPeriodHertz(50);  // Standard 50hz servo
-	meuServo.attach(SERVO_PIN, 500, 2400);
+  ESP32PWM::allocateTimer(0);
+  ESP32PWM::allocateTimer(1);
+  ESP32PWM::allocateTimer(2);
+  ESP32PWM::allocateTimer(3);
+  meuServo.setPeriodHertz(50);
+  meuServo.attach(SERVO_PIN, 500, 2400);
 
-	// --- Initialize Serial Monitor ---
-	Serial.begin(115200);
-	Wire.begin(OLED_SDA, OLED_SCL);
-	Serial.println("System Initialized. Waiting for button press...");
-	// --- Inicialização do Som (DFPlayer) ---
-	somSerial.begin(9600, SERIAL_8N1, 16, 17);
-	Serial.println("A iniciar DFPlayer...");
-	delay(1000);
+  Serial.begin(115200);
+  Wire.begin(OLED_SDA, OLED_SCL);
+  
+  somSerial.begin(9600, SERIAL_8N1, 16, 17);
+  delay(1000);
 
-	pinMode(START_SWITCH, INPUT_PULLUP);
+  pinMode(START_SWITCH, INPUT_PULLUP);
 
-	FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
-	FastLED.setBrightness(BRIGHTNESS);
-	if (!myDFPlayer.begin(somSerial)) {
-		Serial.println("Erro: Não foi possível comunicar com o modulo DFPlayer.");
-		// Removi o while(true) para o código não "congelar" aqui se o som falhar
-	} else {
-		Serial.println("DFPlayer OK! A tocar música...");
-	}
-	FastLED.clear();
-	FastLED.show();
-	if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-		Serial.println("Erro: SSD1306 não encontrado");
-		for (;;)
-			;
-	}
+  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  FastLED.setBrightness(BRIGHTNESS);
+  
+  if (myDFPlayer.begin(somSerial)) {
+    Serial.println("DFPlayer OK");
+  }
 
-	display.clearDisplay();
-	display.display();
-	Serial.println("Ready. Press button to start.");
-	tempoInicio = millis();
-	sistemaAtivo = false;
-	Serial.println(sistemaAtivo);
-	Serial.println(etapaAtual);
+  FastLED.clear();
+  FastLED.show();
+  
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    for (;;);
+  }
+
+  display.clearDisplay();
+  display.display();
+  
+  tempoInicio = millis();
+  sistemaAtivo = false;
 }
+
 void loop() {
   unsigned long tempoAtual = millis();
 
-  // 1. O BOTÃO
   if (digitalRead(START_SWITCH) == LOW && !sistemaAtivo) {
     delay(50);
     sistemaAtivo = true;
@@ -427,82 +417,66 @@ void loop() {
   if (sistemaAtivo) {
     unsigned long decorrido = tempoAtual - tempoInicio;
     display.clearDisplay();
-    FastLED.clear(); 
+    FastLED.clear();
 
-    int pSize = NUM_LEDS / 4; // Blocos de 10 LEDs (se tiver 40)
+    int pSize = NUM_LEDS / 5;
     CRGB corAtiva = CRGB::Black;
-    int particaoParaLigar = 0; // 1 a 4
+    int particaoParaLigar = 0;
 
-    // 2. SINCRONIZAÇÃO ECRÃ + LEDS
     switch (etapaAtual) {
-      case 1: // Imagem: Molhar
-        tempoDestaEtapa = 16000; 
+      case 1:
+        tempoDestaEtapa = 16000;
         display.drawBitmap(0, 0, img_molhar, 128, 64, WHITE);
         corAtiva = CRGB::Blue;
         particaoParaLigar = 1;
         break;
-      case 2: // Imagem: Sabão
-        tempoDestaEtapa = 7000;  
+      case 2:
+        tempoDestaEtapa = 7000;
         display.drawBitmap(0, 0, img_sabao, 128, 64, WHITE);
         corAtiva = CRGB::Red;
         particaoParaLigar = 2;
         break;
-      case 3: // Imagem: Esfregar (Ainda usa a partição do Sabão)
-        tempoDestaEtapa = 20000; 
+      case 3:
+        tempoDestaEtapa = 20000;
         display.drawBitmap(0, 0, img_esfregar, 128, 64, WHITE);
-        corAtiva = CRGB::Red;
-        particaoParaLigar = 2;
-        break;
-      case 4: // Imagem: Molhar (Enxaguar)
-        tempoDestaEtapa = 14000; 
-        display.drawBitmap(0, 0, img_molhar, 128, 64, WHITE);
-        corAtiva = CRGB::Yellow;
+        corAtiva = CRGB::Purple;
         particaoParaLigar = 3;
         break;
-      case 5: // Imagem: Secar
-        tempoDestaEtapa = 8000;  
-        display.drawBitmap(0, 0, img_secar, 128, 64, WHITE);
-        corAtiva = CRGB::Green;
+      case 4:
+        tempoDestaEtapa = 14000;
+        display.drawBitmap(0, 0, img_molhar, 128, 64, WHITE);
+        corAtiva = CRGB::Yellow;
         particaoParaLigar = 4;
         break;
-      case 6: // FIM
-        tempoDestaEtapa = 5000; 
+      case 5:
+        tempoDestaEtapa = 8000;
+        display.drawBitmap(0, 0, img_secar, 128, 64, WHITE);
+        corAtiva = CRGB::Green;
+        particaoParaLigar = 5;
+        break;
+      case 6:
+        tempoDestaEtapa = 5000;
         display.drawBitmap(0, 0, img_confetes, 128, 64, WHITE);
-        wiggleServo(); 
+        updateServoNonBlocking();
         break;
     }
 
-    // 3. ATUALIZAÇÃO DOS LEDS
     if (etapaAtual < 6) {
-      // Calcula o índice inicial da partição ativa
       int inicio = (particaoParaLigar - 1) * pSize;
-      
-      // Acende apenas os LEDs daquela partição
-      fill_solid(&leds[inicio], pSize, corAtiva);
+      int fim = min(inicio + pSize, (int)NUM_LEDS);
+      fill_solid(&leds[inicio], (fim - inicio), corAtiva);
 
-      // Efeito Opcional: Faz a partição "respirar" (pulsar)
       uint8_t pulse = beatsin8(40, 100, 255);
-      for(int i = inicio; i < inicio + pSize; i++) {
+      for (int i = inicio; i < fim; i++) {
         leds[i].nscale8(pulse);
       }
     } else {
-      // ETAPA 6: RAINBOW SLIGHTLY BLINKING
-      static uint8_t hue = 0;
-      hue += 2; // Velocidade da transição de cores
-      
-      fill_rainbow(leds, NUM_LEDS, hue, 7);
-
-      // Pisca suavemente: alterna entre ligado e desligado a cada 150ms
-      // Se quiser que o "apagado" dure menos, aumente o 150
-      if ((millis() / 150) % 2 == 0) {
-        FastLED.clear(); 
-      }
-		}
+      fill_solid(leds, NUM_LEDS, CRGB::Green);
+    }
 
     FastLED.show();
     display.display();
 
-    // 4. MUDANÇA DE ETAPA
     if (decorrido >= tempoDestaEtapa) {
       if (etapaAtual < 6) {
         etapaAtual++;
@@ -512,37 +486,38 @@ void loop() {
         FastLED.show();
         display.clearDisplay();
         display.display();
+        meuServo.write(90);
         sistemaAtivo = false;
         etapaAtual = 0;
       }
     }
   }
 }
-void wiggleServo() {
-	// Servo spins forward at full speed for 1 second.
-	meuServo.write(180);
-	delay(250);
-	meuServo.write(90);
-	delay(250);
-	meuServo.write(180);
-	delay(250);
-	meuServo.write(90);
-	delay(250);
-	meuServo.write(180);
-	delay(250);
-	meuServo.write(90);
-	delay(250);
+
+void updateServoNonBlocking() {
+  static unsigned long lastServoMove = 0;
+  static bool side = false;
+  unsigned long currentMillis = millis();
+
+  if (currentMillis - lastServoMove >= 250) {
+    lastServoMove = currentMillis;
+    if (side) {
+      meuServo.write(135); 
+    } else {
+      meuServo.write(45);
+    }
+    side = !side;
+  }
 }
+
 void runColorCycle(unsigned long duration) {
-	unsigned long startTime = millis();
-
-	while (millis() - startTime < duration) {
-		static uint8_t hue = 0;
-		fill_rainbow(leds, NUM_LEDS, hue++, 7);
-		FastLED.show();
-		delay(20);
-	}
-
-	FastLED.clear();
-	FastLED.show();
+  unsigned long startTime = millis();
+  while (millis() - startTime < duration) {
+    static uint8_t hue = 0;
+    fill_rainbow(leds, NUM_LEDS, hue++, 7);
+    FastLED.show();
+    delay(20);
+  }
+  FastLED.clear();
+  FastLED.show();
 }
